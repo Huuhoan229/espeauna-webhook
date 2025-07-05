@@ -148,18 +148,32 @@ const KNOWLEDGE_BASE_CHUNKS = [
 function retrieveRelevantChunks(query, knowledgeBase, numChunks = 3) {
   const lowerCaseQuery = query.toLowerCase();
   const relevantChunks = [];
-  // Tách từ khóa, loại bỏ các từ ngắn và các từ dừng phổ biến (có thể mở rộng danh sách từ dừng)
-  const stopWords = new Set(['là', 'gì', 'có', 'không', 'và', 'của', 'tôi', 'bạn', 'sản', 'phẩm', 'này', 'cho', 'từ', 'với', 'như', 'để', 'hay', 'về', 'nào', 'thế', 'nào', 'sao', 'muốn', 'biết']);
-  const keywords = lowerCaseQuery.split(/\s+/)
+  // Danh sách từ dừng tiếng Việt mở rộng để cải thiện khả năng lọc
+  const stopWords = new Set([
+    'là', 'gì', 'có', 'không', 'và', 'của', 'tôi', 'bạn', 'sản', 'phẩm', 'này', 'cho', 'từ', 'với', 'như', 'để', 'hay', 'về', 'nào', 'thế', 'nào', 'sao', 'muốn', 'biết',
+    'em', 'chị', 'shop', 'mình', 'cần', 'tìm', 'hỏi', 'giá', 'bao', 'nhiêu', 'công', 'dụng', 'thành', 'phần', 'cách', 'sử', 'dụng', 'đối', 'tượng', 'lưu', 'ý', 'thương', 'hiệu',
+    'ở', 'đâu', 'liên', 'hệ', 'số', 'điện', 'thoại', 'email', 'website', 'facebook', 'shopee', 'lazada', 'chính', 'sách', 'giao', 'hàng', 'đổi', 'trả', 'hàng', 'tồn', 'kho',
+    'nước', 'gel', 'kem', 'tinh', 'chất', 'bọt', 'rửa', 'mặt', 'dầu', 'tẩy', 'trang', 'dung', 'dịch', 'làm', 'sạch', 'sâu', 'dịu', 'giảm', 'nhờn', 'phục', 'hồi', 'ẩm', 'trắng', 'mờ', 'thâm', 'nám', 'collagen', 'tái', 'tạo', 'da', 'khoáng', 'biển'
+  ]);
+  
+  // Hàm chuẩn hóa tiếng Việt không dấu (có thể tích hợp thư viện bên ngoài nếu cần độ chính xác cao hơn)
+  const normalizeVietnamese = (text) => {
+    text = text.normalize("NFD").replace(/[\u0300-\u036f]/g, ""); // Loại bỏ dấu
+    text = text.replace(/đ/g, "d").replace(/Đ/g, "D"); // Xử lý chữ đ/d
+    return text.toLowerCase();
+  };
+
+  const normalizedQuery = normalizeVietnamese(query);
+  const keywords = normalizedQuery.split(/\s+/)
                                .filter(word => word.length > 2 && !stopWords.has(word));
 
-  // Nếu không có từ khóa nào sau khi lọc, sử dụng toàn bộ truy vấn
-  const searchTerms = keywords.length > 0 ? keywords : [lowerCaseQuery];
+  // Nếu không có từ khóa nào sau khi lọc, sử dụng toàn bộ truy vấn đã chuẩn hóa
+  const searchTerms = keywords.length > 0 ? keywords : [normalizedQuery];
 
   // Duyệt qua từng chunk và kiểm tra sự xuất hiện của từ khóa
   for (const chunk of knowledgeBase) {
     let score = 0;
-    const lowerCaseChunkText = chunk.text.toLowerCase();
+    const lowerCaseChunkText = normalizeVietnamese(chunk.text); // Chuẩn hóa cả văn bản trong chunk
 
     for (const term of searchTerms) {
       if (lowerCaseChunkText.includes(term)) {
@@ -206,26 +220,28 @@ app.post('/webhook', async (req, res) => {
         console.log(`Tin nhắn từ người dùng (${sender_psid}): "${userMessage}"`);
 
         let geminiReplyText = "Xin lỗi, tôi không thể xử lý yêu cầu của bạn lúc này. Vui lòng thử lại sau.";
+        let isProductRelatedQuery = false;
 
         try {
           // --- TRUY XUẤT THÔNG TIN LIÊN QUAN ---
           const relevantChunks = retrieveRelevantChunks(userMessage, KNOWLEDGE_BASE_CHUNKS, 3); // Lấy tối đa 3 đoạn liên quan
 
-          let promptForGemini = userMessage;
+          let promptForGemini;
           if (relevantChunks.length > 0) {
+            isProductRelatedQuery = true;
             // Xây dựng prompt để hướng dẫn Gemini chỉ trả lời dựa trên thông tin được cung cấp
-            const contextString = relevantChunks.join('\n\n'); // Nối các đoạn văn bản đã truy xuất
-            promptForGemini = `Dựa vào thông tin sau đây về Espeauna, hãy trả lời câu hỏi của người dùng. Nếu thông tin được cung cấp không đủ để trả lời câu hỏi, hãy nói rằng bạn không có đủ thông tin hoặc mời người dùng liên hệ trực tiếp.
+            // và yêu cầu rõ ràng khi không đủ thông tin.
+            promptForGemini = `Dựa vào thông tin sau đây về Espeauna, hãy trả lời câu hỏi của người dùng bằng tiếng Việt. Nếu thông tin được cung cấp không đủ để trả lời câu hỏi, hãy nói rõ rằng bạn không có đủ thông tin và mời người dùng để lại số điện thoại để được tư vấn chi tiết hơn.
             
             Thông tin tham khảo từ Espeauna:
             """
-            ${contextString}
+            ${relevantChunks.join('\n\n')}
             """
             
             Câu hỏi của người dùng: "${userMessage}"`;
           } else {
-            // Nếu không tìm thấy thông tin liên quan, vẫn có thể trả lời chung chung hoặc thông báo
-            promptForGemini = `Tôi không tìm thấy thông tin cụ thể về "${userMessage}" trong cơ sở dữ liệu của mình. Vui lòng thử một câu hỏi khác hoặc liên hệ trực tiếp qua hotline 096.128.6399 hoặc email vngenmart@gmail.com để được hỗ trợ thêm.`;
+            // Cho phép Gemini "chém gió" cho các câu hỏi không liên quan đến sản phẩm
+            promptForGemini = userMessage; // Để Gemini tự do tạo phản hồi
           }
 
           // Xây dựng URL cho Gemini API
@@ -250,17 +266,46 @@ app.post('/webhook', async (req, res) => {
               geminiResponse.data.candidates[0].content &&
               geminiResponse.data.candidates[0].content.parts &&
               geminiResponse.data.candidates[0].content.parts.length > 0) {
-            const parsedText = geminiResponse.data.candidates[0].content.parts[0].text;
+            const rawGeminiText = geminiResponse.data.candidates[0].content.parts[0].text;
+            
             // Kiểm tra xem phản hồi có phải là JSON string không (ví dụ: nếu model trả về structured data)
             try {
-                geminiReplyText = JSON.parse(parsedText);
+                const parsedJson = JSON.parse(rawGeminiText);
                 // Nếu là JSON, bạn có thể định dạng lại nó thành chuỗi thân thiện với người dùng
-                if (typeof geminiReplyText === 'object') {
-                    geminiReplyText = JSON.stringify(geminiReplyText, null, 2); // Hoặc định dạng tùy chỉnh
+                if (typeof parsedJson === 'object') {
+                    geminiReplyText = JSON.stringify(parsedJson, null, 2); // Hoặc định dạng tùy chỉnh
+                } else {
+                    geminiReplyText = rawGeminiText;
                 }
             } catch (e) {
-                geminiReplyText = parsedText; // Nếu không phải JSON, sử dụng nguyên văn
+                geminiReplyText = rawGeminiText; // Nếu không phải JSON, sử dụng nguyên văn
             }
+
+            // Thêm logic kiểm tra "chém gió" và yêu cầu số điện thoại cho các câu hỏi liên quan đến sản phẩm
+            if (isProductRelatedQuery) {
+                const normalizedGeminiReply = normalizeVietnamese(geminiReplyText);
+                // Các cụm từ khóa cho thấy Gemini không có đủ thông tin hoặc đang "chém gió"
+                const fallbackKeywords = [
+                    'tôi không có đủ thông tin',
+                    'tôi không tìm thấy thông tin',
+                    'tôi không thể tìm thấy thông tin',
+                    'xin lỗi tôi không có thông tin',
+                    'tôi không biết',
+                    'tôi không thể trả lời câu hỏi này'
+                ];
+                let shouldFallbackToPhoneNumber = false;
+                for (const keyword of fallbackKeywords) {
+                    if (normalizedGeminiReply.includes(normalizeVietnamese(keyword))) {
+                        shouldFallbackToPhoneNumber = true;
+                        break;
+                    }
+                }
+
+                if (shouldFallbackToPhoneNumber) {
+                    geminiReplyText = `Xin lỗi, tôi không có đủ thông tin để trả lời câu hỏi này một cách chi tiết. Vui lòng để lại số điện thoại, chúng tôi sẽ liên hệ tư vấn kỹ càng hơn cho bạn.`;
+                }
+            }
+
           } else {
             console.error("Cấu trúc phản hồi từ Gemini API không mong muốn:", JSON.stringify(geminiResponse.data, null, 2));
             geminiReplyText = "Đã xảy ra lỗi khi nhận phản hồi từ Gemini. Vui lòng thử lại.";
