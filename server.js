@@ -4,19 +4,75 @@ const bodyParser = require('body-parser'); // Middleware để xử lý body c�
 const axios = require('axios'); // Thư viện để thực hiện HTTP requests (gọi API)
 require('dotenv').config(); // Tải các biến môi trường từ file .env
 
+// Import Firebase Admin SDK (để tương tác với Firestore)
+// Lưu ý: Trong môi trường Canvas, bạn sẽ sử dụng các biến global __firebase_config và các hàm client-side SDK.
+// Tuy nhiên, nếu triển khai trên server Node.js thông thường, bạn sẽ cần Firebase Admin SDK.
+// Để đơn giản hóa cho môi trường Canvas, chúng ta sẽ giả định các biến global được cung cấp
+// và tập trung vào logic.
+// Trong môi trường thực tế, bạn sẽ dùng:
+// const admin = require('firebase-admin');
+// const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY); // Đảm bảo key được lưu an toàn
+// admin.initializeApp({
+//   credential: admin.credential.cert(serviceAccount),
+//   databaseURL: `https://${serviceAccount.project_id}.firebaseio.com`
+// });
+// const db = admin.firestore();
+
+// Để tương thích với môi trường Canvas, chúng ta sẽ mô phỏng việc sử dụng Firestore
+// bằng cách truy cập các biến global được cung cấp.
+// Trong môi trường Canvas, các hàm Firebase client-side SDK sẽ được tải sẵn.
+// Ví dụ: import { initializeApp } from 'firebase/app';
+// import { getFirestore, doc, setDoc, getDoc, collection, addDoc, query, orderBy, limit } from 'firebase/firestore';
+
 // Khởi tạo ứng dụng Express
 const app = express();
 // Sử dụng middleware bodyParser để phân tích các request body dưới dạng JSON
 app.use(bodyParser.json());
 
 // Lấy các biến môi trường từ file .env hoặc từ cấu hình của Railway
-// Đảm bảo rằng bạn đã định nghĩa các biến này trong môi trường của mình
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN; // Token xác minh cho webhook của Facebook
 const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN; // Mã truy cập trang Facebook của bạn
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY; // Khóa API của Gemini
 
+// Các biến global được cung cấp bởi môi trường Canvas cho Firebase
+// Đảm bảo rằng các biến này được định nghĩa trong môi trường Railway của bạn
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+// Khởi tạo Firebase và Firestore (sử dụng client-side SDK syntax cho Canvas)
+let firebaseApp;
+let db;
+let auth;
+
+// Hàm khởi tạo Firebase (sẽ được gọi khi ứng dụng bắt đầu)
+async function initializeFirebase() {
+  try {
+    const { initializeApp } = require('firebase/app');
+    const { getAuth, signInWithCustomToken, signInAnonymously } = require('firebase/auth');
+    const { getFirestore } = require('firebase/firestore');
+
+    firebaseApp = initializeApp(firebaseConfig);
+    db = getFirestore(firebaseApp);
+    auth = getAuth(firebaseApp);
+
+    if (initialAuthToken) {
+      await signInWithCustomToken(auth, initialAuthToken);
+      console.log('Firebase: Đăng nhập bằng custom token thành công.');
+    } else {
+      await signInAnonymously(auth);
+      console.log('Firebase: Đăng nhập ẩn danh thành công.');
+    }
+  } catch (error) {
+    console.error('Firebase: Lỗi khởi tạo hoặc đăng nhập:', error);
+  }
+}
+
+// Gọi hàm khởi tạo Firebase ngay khi server bắt đầu
+initializeFirebase();
+
+
 // --- CƠ SỞ TRI THỨC ĐƠN GIẢN TRONG BỘ NHỚ (SIMPLIFIED IN-MEMORY KNOWLEDGE BASE) ---
-// Đã được cập nhật với thông tin từ các trang sản phẩm Espeauna
 const KNOWLEDGE_BASE_CHUNKS = [
   { id: 'espeauna_gioithieu_chung', text: "Espeauna là thương hiệu mỹ phẩm cao cấp chuyên về các sản phẩm chăm sóc da từ Hàn Quốc. Chúng tôi tập trung vào việc kết hợp các thành phần tự nhiên tinh túy với công nghệ khoa học tiên tiến để mang lại hiệu quả vượt trội cho làn da." },
   
@@ -121,9 +177,9 @@ const KNOWLEDGE_BASE_CHUNKS = [
 
   // Thông tin sản phẩm: Tinh Chất Làm Dịu Da Và Giảm Nhờn ESPEAUNA REFRESHING AMPOULE 50ml
   { id: 'espeauna_product_refreshing_ampoule_50ml_name', text: "Tên sản phẩm: Tinh Chất Làm Dịu Da Và Giảm Nhờn ESPEAUNA REFRESHING AMPOULE 50ml. Thương hiệu: Èspeauna. Mã SKU: TCLDGNDA50ml. Dung tích: 50mL." },
-  { id: 'espeauna_product_refreshing_ampoule_50ml_price', text: "Giá sản phẩm Tinh Chất Làm Dịu Da Và Giảm Nhờn ESPEAUNA REFRESHING AMPOULE 50ml là 410.000₫. Giá gốc là 512.500₫, được giảm 20%." },
+  { id: 'espeauna_product_refreshing_ampoule_50ml_price', text: "Giá sản phẩm Tinh Chất Làm Dịu Và Giảm Nhờn ESPEAUNA REFRESHING AMPOULE 50ml là 410.000₫. Giá gốc là 512.500₫, được giảm 20%." },
   { id: 'espeauna_product_refreshing_ampoule_50ml_rating', text: "Sản phẩm Tinh Chất Làm Dịu Và Giảm Nhờn ESPEAUNA REFRESHING AMPOULE 50ml được đánh giá 5.00 trên 5 sao dựa trên 17 đánh giá, tổng cộng có 18 đánh giá của khách hàng." },
-  { id: 'espeauna_product_refreshing_ampoule_50ml_congdung', text: "Công dụng nổi bật của Tinh Chất Làm Dịu Da Và Giảm Nhờn ESPEAUNA REFRESHING AMPOULE 50ml: Cung cấp dưỡng chất cô đặc giúp nuôi dưỡng sâu và khôi phục cân bằng da; Điều tiết bã nhờn, hỗ trợ kiểm soát dầu – giảm nguy cơ bít tắc lỗ chân lông; Cân bằng dầu – nước, cải thiện lưu thông dưới da; Hỗ trợ phục hồi vùng da bị mụn, viêm hoặc lỗ chân lông to; Làm dịu nhanh vùng da kích ứng, tăng cường sức đề kháng tự nhiên." },
+  { id: 'espeauna_product_refreshing_ampoule_50ml_congdung', text: "Công dụng nổi bật của Tinh Chất Làm Dịu Và Giảm Nhờn ESPEAUNA REFRESHING AMPOULE 50ml: Cung cấp dưỡng chất cô đặc giúp nuôi dưỡng sâu và khôi phục cân bằng da; Điều tiết bã nhờn, hỗ trợ kiểm soát dầu – giảm nguy cơ bít tắc lỗ chân lông; Cân bằng dầu – nước, cải thiện lưu thông dưới da; Hỗ trợ phục hồi vùng da bị mụn, viêm hoặc lỗ chân lông to; Làm dịu nhanh vùng da kích ứng, tăng cường sức đề kháng tự nhiên." },
   { id: 'espeauna_product_refreshing_ampoule_50ml_thanhphan', text: "Thành phần nổi bật của Tinh Chất Làm Dịu Và Giảm Nhờn ESPEAUNA REFRESHING AMPOULE 50ml: Chiết xuất trà xanh, rau má, lá diếp cá, lá tía tô, hạt ca cao, nha đam… (Làm dịu, kháng viêm và cấp ẩm); Niacinamide, Adenosine, PHA (Gluconolactone) (Làm sáng và chống lão hóa); Hyaluronic Acid, Sodium PCA (Cấp nước sâu, giữ ẩm dài lâu); Chiết xuất men lên men (Bifida, Lactobacillus, Saccharomyces) (Tăng cường sức sống cho da); Salicylic Acid (BHA), Citric/Malic/Lactic/Glycolic Acid (AHA) (Hỗ trợ làm sạch và tẩy tế bào chết dịu nhẹ)." },
   { id: 'espeauna_product_refreshing_ampoule_50ml_cachsudung', text: "Cách sử dụng Tinh Chất Làm Dịu Và Giảm Nhờn ESPEAUNA REFRESHING AMPOULE 50ml: Sau bước toner, lấy 2–3 giọt ampoule thoa đều lên mặt. Massage nhẹ đến khi thẩm thấu hoàn toàn. Dùng mỗi ngày sáng và tối." },
   { id: 'espeauna_product_refreshing_ampoule_50ml_doituong', text: "Đối tượng sử dụng Tinh Chất Làm Dịu Và Giảm Nhờn ESPEAUNA REFRESHING AMPOULE 50ml: Da dầu, da hỗn hợp thiên dầu; Da mụn, da nhạy cảm, lỗ chân lông to; Da mất cân bằng, thường xuyên kích ứng hoặc bị bít tắc." },
@@ -143,6 +199,77 @@ const normalizeVietnamese = (text) => {
   text = text.replace(/đ/g, "d").replace(/Đ/g, "D"); // Xử lý chữ đ/d
   return text.toLowerCase();
 };
+
+/**
+ * Hàm để lưu tin nhắn vào Firestore.
+ * @param {string} senderId - ID của người gửi (PSID của Messenger).
+ * @param {string} role - Vai trò (user hoặc bot).
+ * @param {string} text - Nội dung tin nhắn.
+ * @param {string} [productContextId] - ID của sản phẩm đang được thảo luận (nếu có).
+ */
+async function saveMessage(senderId, role, text, productContextId = null) {
+  if (!db) {
+    console.error('Firestore chưa được khởi tạo.');
+    return;
+  }
+  try {
+    const { collection, addDoc } = require('firebase/firestore');
+    await addDoc(collection(db, `artifacts/${appId}/users/${senderId}/messages`), {
+      role,
+      text,
+      timestamp: new Date(),
+      productContext: productContextId,
+    });
+    console.log(`Đã lưu tin nhắn từ ${role} (${senderId}) vào Firestore.`);
+  } catch (error) {
+    console.error('Lỗi khi lưu tin nhắn vào Firestore:', error);
+  }
+}
+
+/**
+ * Hàm để lấy ngữ cảnh sản phẩm hiện tại của người dùng từ Firestore.
+ * @param {string} senderId - ID của người gửi.
+ * @returns {Promise<string|null>} - ID của sản phẩm hoặc null nếu không có.
+ */
+async function getProductContext(senderId) {
+  if (!db) {
+    console.error('Firestore chưa được khởi tạo.');
+    return null;
+  }
+  try {
+    const { doc, getDoc } = require('firebase/firestore');
+    const userDocRef = doc(db, `artifacts/${appId}/users/${senderId}`);
+    const userDocSnap = await getDoc(userDocRef);
+    if (userDocSnap.exists()) {
+      return userDocSnap.data().currentProductContext || null;
+    }
+    return null;
+  } catch (error) {
+    console.error('Lỗi khi lấy ngữ cảnh sản phẩm từ Firestore:', error);
+    return null;
+  }
+}
+
+/**
+ * Hàm để đặt ngữ cảnh sản phẩm hiện tại cho người dùng vào Firestore.
+ * @param {string} senderId - ID của người gửi.
+ * @param {string|null} productContextId - ID của sản phẩm hoặc null để xóa ngữ cảnh.
+ */
+async function setProductContext(senderId, productContextId) {
+  if (!db) {
+    console.error('Firestore chưa được khởi tạo.');
+    return;
+  }
+  try {
+    const { doc, setDoc } = require('firebase/firestore');
+    const userDocRef = doc(db, `artifacts/${appId}/users/${senderId}`);
+    await setDoc(userDocRef, { currentProductContext: productContextId }, { merge: true });
+    console.log(`Đã đặt ngữ cảnh sản phẩm cho ${senderId}: ${productContextId}`);
+  } catch (error) {
+    console.error('Lỗi khi đặt ngữ cảnh sản phẩm vào Firestore:', error);
+  }
+}
+
 
 /**
  * Hàm đơn giản để truy xuất các đoạn văn bản liên quan dựa trên từ khóa.
@@ -221,9 +348,13 @@ app.post('/webhook', async (req, res) => {
 
         let geminiReplyText = "Xin lỗi, tôi không thể xử lý yêu cầu của bạn lúc này. Vui lòng thử lại sau.";
         let isProductRelatedQuery = false;
+        let currentProductContext = null;
+
+        // Lấy ngữ cảnh sản phẩm hiện tại từ Firestore
+        currentProductContext = await getProductContext(sender_psid);
+        console.log(`Ngữ cảnh sản phẩm hiện tại cho ${sender_psid}: ${currentProductContext}`);
 
         // Xác định xem câu hỏi có liên quan đến sản phẩm hay không
-        // Có thể mở rộng logic này để chính xác hơn, ví dụ: dựa trên các từ khóa sản phẩm cụ thể
         const productKeywords = ['sản phẩm', 'giá', 'công dụng', 'thành phần', 'sử dụng', 'đối tượng', 'lưu ý', 'mua', 'đặt hàng', 'ship', 'thanh toán', 'đổi trả', 'bảo hành'];
         const normalizedUserMessage = normalizeVietnamese(userMessage);
         for (const keyword of productKeywords) {
@@ -232,10 +363,21 @@ app.post('/webhook', async (req, res) => {
                 break;
             }
         }
+        
+        // Lưu tin nhắn của người dùng vào Firestore
+        await saveMessage(sender_psid, 'user', userMessage, currentProductContext);
 
         try {
           // --- TRUY XUẤT THÔNG TIN LIÊN QUAN ---
-          const relevantChunks = retrieveRelevantChunks(userMessage, KNOWLEDGE_BASE_CHUNKS, 3); // Lấy tối đa 3 đoạn liên quan
+          let relevantChunks = retrieveRelevantChunks(userMessage, KNOWLEDGE_BASE_CHUNKS, 3);
+
+          // Nếu có ngữ cảnh sản phẩm, ưu tiên các chunk liên quan đến sản phẩm đó
+          if (currentProductContext && !normalizedUserMessage.includes(normalizeVietnamese('sản phẩm khác'))) {
+            const productSpecificChunks = KNOWLEDGE_BASE_CHUNKS.filter(chunk => chunk.id.includes(currentProductContext));
+            // Kết hợp các chunk chung và các chunk cụ thể của sản phẩm, ưu tiên sản phẩm cụ thể
+            relevantChunks = [...new Set([...productSpecificChunks.map(c => c.text), ...relevantChunks])];
+            console.log(`Đã thêm chunk từ ngữ cảnh sản phẩm: ${currentProductContext}`);
+          }
 
           let promptForGemini;
           if (relevantChunks.length > 0) {
@@ -251,7 +393,8 @@ app.post('/webhook', async (req, res) => {
             Câu hỏi của người dùng: "${userMessage}"`;
           } else {
             // Cho phép Gemini "chém gió" cho các câu hỏi không liên quan đến sản phẩm
-            promptForGemini = userMessage; // Để Gemini tự do tạo phản hồi
+            // hoặc khi không tìm thấy thông tin liên quan trong RAG
+            promptForGemini = userMessage; 
           }
 
           // Xây dựng URL cho Gemini API
@@ -291,6 +434,28 @@ app.post('/webhook', async (req, res) => {
                 geminiReplyText = rawGeminiText; // Nếu không phải JSON, sử dụng nguyên văn
             }
 
+            // Cập nhật ngữ cảnh sản phẩm nếu một sản phẩm mới được nhắc đến
+            const productNames = KNOWLEDGE_BASE_CHUNKS.filter(c => c.id.startsWith('espeauna_product_') && c.id.endsWith('_name')).map(c => normalizeVietnamese(c.text));
+            let newProductIdentified = null;
+            for (const pName of productNames) {
+                if (normalizedUserMessage.includes(pName)) {
+                    // Tìm ID sản phẩm tương ứng
+                    const foundProductChunk = KNOWLEDGE_BASE_CHUNKS.find(c => normalizeVietnamese(c.text) === pName);
+                    if (foundProductChunk) {
+                        newProductIdentified = foundProductChunk.id.replace('_name', ''); // Lấy ID sản phẩm
+                        break;
+                    }
+                }
+            }
+            // Nếu người dùng hỏi về một sản phẩm cụ thể, cập nhật ngữ cảnh
+            if (newProductIdentified) {
+                await setProductContext(sender_psid, newProductIdentified);
+            } else if (normalizedUserMessage.includes(normalizeVietnamese('sản phẩm khác')) || normalizedUserMessage.includes(normalizeVietnamese('tôi muốn hỏi về cái khác'))) {
+                // Nếu người dùng muốn hỏi về sản phẩm khác hoặc chủ đề khác, xóa ngữ cảnh
+                await setProductContext(sender_psid, null);
+            }
+
+
             // Thêm logic kiểm tra "chém gió" và yêu cầu số điện thoại cho các câu hỏi liên quan đến sản phẩm
             if (isProductRelatedQuery) {
                 const normalizedGeminiReply = normalizeVietnamese(geminiReplyText);
@@ -322,10 +487,14 @@ app.post('/webhook', async (req, res) => {
           }
           
           console.log(`Phản hồi từ Gemini: "${geminiReplyText}"`);
+          // Lưu phản hồi của bot vào Firestore
+          await saveMessage(sender_psid, 'bot', geminiReplyText, currentProductContext);
 
         } catch (error) {
           console.error("Lỗi khi gọi Gemini API:", error.response ? error.response.data : error.message);
           geminiReplyText = "Đã xảy ra lỗi khi kết nối với Gemini API. Vui lòng kiểm tra lại khóa API hoặc trạng thái dịch vụ.";
+          // Lưu phản hồi lỗi của bot vào Firestore
+          await saveMessage(sender_psid, 'bot', geminiReplyText, currentProductContext);
         }
 
         // Gửi lại phản hồi từ Gemini cho người dùng Messenger
