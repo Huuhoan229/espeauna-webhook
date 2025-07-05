@@ -355,7 +355,7 @@ app.post('/webhook', async (req, res) => {
         console.log(`Ngữ cảnh sản phẩm hiện tại cho ${sender_psid}: ${currentProductContext}`);
 
         // Xác định xem câu hỏi có liên quan đến sản phẩm hay không
-        const productKeywords = ['sản phẩm', 'giá', 'công dụng', 'thành phần', 'sử dụng', 'đối tượng', 'lưu ý', 'mua', 'đặt hàng', 'ship', 'thanh toán', 'đổi trả', 'bảo hành'];
+        const productKeywords = ['sản phẩm', 'giá', 'công dụng', 'thành phần', 'sử dụng', 'đối tượng', 'lưu ý', 'mua', 'đặt hàng', 'ship', 'thanh toán', 'đổi trả', 'bảo hành', 'sản phẩm nào', 'sản phẩm gì'];
         const normalizedUserMessage = normalizeVietnamese(userMessage);
         for (const keyword of productKeywords) {
             if (normalizedUserMessage.includes(normalizeVietnamese(keyword))) {
@@ -372,7 +372,7 @@ app.post('/webhook', async (req, res) => {
           let relevantChunks = retrieveRelevantChunks(userMessage, KNOWLEDGE_BASE_CHUNKS, 3);
 
           // Nếu có ngữ cảnh sản phẩm, ưu tiên các chunk liên quan đến sản phẩm đó
-          if (currentProductContext && !normalizedUserMessage.includes(normalizeVietnamese('sản phẩm khác'))) {
+          if (currentProductContext && !normalizedUserMessage.includes(normalizeVietnamese('sản phẩm khác')) && !normalizedUserMessage.includes(normalizeVietnamese('cái khác'))) {
             const productSpecificChunks = KNOWLEDGE_BASE_CHUNKS.filter(chunk => chunk.id.includes(currentProductContext));
             // Kết hợp các chunk chung và các chunk cụ thể của sản phẩm, ưu tiên sản phẩm cụ thể
             relevantChunks = [...new Set([...productSpecificChunks.map(c => c.text), ...relevantChunks])];
@@ -380,21 +380,26 @@ app.post('/webhook', async (req, res) => {
           }
 
           let promptForGemini;
-          if (relevantChunks.length > 0) {
-            // Xây dựng prompt để hướng dẫn Gemini chỉ trả lời dựa trên thông tin được cung cấp
-            // và yêu cầu rõ ràng khi không đủ thông tin.
-            promptForGemini = `Dựa vào thông tin sau đây về Espeauna, hãy trả lời câu hỏi của người dùng bằng tiếng Việt. Nếu thông tin được cung cấp không đủ để trả lời câu hỏi, hãy nói rõ rằng bạn không có đủ thông tin và mời người dùng để lại số điện thoại để được tư vấn chi tiết hơn.
-            
-            Thông tin tham khảo từ Espeauna:
-            """
-            ${relevantChunks.join('\n\n')}
-            """
-            
-            Câu hỏi của người dùng: "${userMessage}"`;
+          if (isProductRelatedQuery) {
+              if (relevantChunks.length > 0) {
+                  // Nếu có dữ liệu từ website, yêu cầu Gemini sử dụng nó và bổ sung kiến thức chung
+                  promptForGemini = `Dựa vào thông tin sau đây về Espeauna, hãy trả lời câu hỏi của người dùng bằng tiếng Việt. Nếu thông tin từ website không đủ, hãy sử dụng kiến thức chung của bạn để cung cấp câu trả lời toàn diện hơn. Chỉ khi không thể trả lời đầy đủ, hãy nói rõ rằng bạn không có đủ thông tin và mời người dùng để lại số điện thoại để được tư vấn chi tiết hơn.
+                  
+                  Thông tin tham khảo từ Espeauna:
+                  """
+                  ${relevantChunks.join('\n\n')}
+                  """
+                  
+                  Câu hỏi của người dùng: "${userMessage}"`;
+              } else {
+                  // Nếu là câu hỏi về sản phẩm nhưng không tìm thấy dữ liệu website, yêu cầu Gemini dùng kiến thức chung
+                  promptForGemini = `Bạn là một chatbot tư vấn mỹ phẩm của thương hiệu Espeauna. Vui lòng trả lời câu hỏi của người dùng về sản phẩm bằng tiếng Việt, sử dụng kiến thức chung của bạn. Nếu bạn vẫn không thể trả lời đầy đủ, hãy nói rõ rằng bạn không có đủ thông tin và mời người dùng để lại số điện thoại để được tư vấn chi tiết hơn.
+
+                  Câu hỏi của người dùng: "${userMessage}"`;
+              }
           } else {
-            // Cho phép Gemini "chém gió" cho các câu hỏi không liên quan đến sản phẩm
-            // hoặc khi không tìm thấy thông tin liên quan trong RAG
-            promptForGemini = userMessage; 
+              // Đối với các câu hỏi không liên quan đến sản phẩm, cho phép Gemini "chém gió"
+              promptForGemini = userMessage; 
           }
 
           // Xây dựng URL cho Gemini API
@@ -457,6 +462,7 @@ app.post('/webhook', async (req, res) => {
 
 
             // Thêm logic kiểm tra "chém gió" và yêu cầu số điện thoại cho các câu hỏi liên quan đến sản phẩm
+            // Chỉ thực hiện fallback nếu đây là câu hỏi liên quan đến sản phẩm
             if (isProductRelatedQuery) {
                 const normalizedGeminiReply = normalizeVietnamese(geminiReplyText);
                 // Các cụm từ khóa cho thấy Gemini không có đủ thông tin hoặc đang "chém gió"
@@ -466,7 +472,8 @@ app.post('/webhook', async (req, res) => {
                     'tôi không thể tìm thấy thông tin',
                     'xin lỗi tôi không có thông tin',
                     'tôi không biết',
-                    'tôi không thể trả lời câu hỏi này'
+                    'tôi không thể trả lời câu hỏi này',
+                    'tôi không được cung cấp thông tin này' // Thêm một số cụm từ khóa khác
                 ];
                 let shouldFallbackToPhoneNumber = false;
                 for (const keyword of fallbackKeywords) {
