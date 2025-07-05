@@ -122,7 +122,7 @@ const KNOWLEDGE_BASE_CHUNKS = [
   // Thông tin sản phẩm: Tinh Chất Làm Dịu Da Và Giảm Nhờn ESPEAUNA REFRESHING AMPOULE 50ml
   { id: 'espeauna_product_refreshing_ampoule_50ml_name', text: "Tên sản phẩm: Tinh Chất Làm Dịu Da Và Giảm Nhờn ESPEAUNA REFRESHING AMPOULE 50ml. Thương hiệu: Èspeauna. Mã SKU: TCLDGNDA50ml. Dung tích: 50mL." },
   { id: 'espeauna_product_refreshing_ampoule_50ml_price', text: "Giá sản phẩm Tinh Chất Làm Dịu Da Và Giảm Nhờn ESPEAUNA REFRESHING AMPOULE 50ml là 410.000₫. Giá gốc là 512.500₫, được giảm 20%." },
-  { id: 'espeauna_product_refreshing_ampoule_50ml_rating', text: "Sản phẩm Tinh Chất Làm Dịu Da Và Giảm Nhờn ESPEAUNA REFRESHING AMPOULE 50ml được đánh giá 5.00 trên 5 sao dựa trên 17 đánh giá, tổng cộng có 18 đánh giá của khách hàng." },
+  { id: 'espeauna_product_refreshing_ampoule_50ml_rating', text: "Sản phẩm Tinh Chất Làm Dịu Và Giảm Nhờn ESPEAUNA REFRESHING AMPOULE 50ml được đánh giá 5.00 trên 5 sao dựa trên 17 đánh giá, tổng cộng có 18 đánh giá của khách hàng." },
   { id: 'espeauna_product_refreshing_ampoule_50ml_congdung', text: "Công dụng nổi bật của Tinh Chất Làm Dịu Da Và Giảm Nhờn ESPEAUNA REFRESHING AMPOULE 50ml: Cung cấp dưỡng chất cô đặc giúp nuôi dưỡng sâu và khôi phục cân bằng da; Điều tiết bã nhờn, hỗ trợ kiểm soát dầu – giảm nguy cơ bít tắc lỗ chân lông; Cân bằng dầu – nước, cải thiện lưu thông dưới da; Hỗ trợ phục hồi vùng da bị mụn, viêm hoặc lỗ chân lông to; Làm dịu nhanh vùng da kích ứng, tăng cường sức đề kháng tự nhiên." },
   { id: 'espeauna_product_refreshing_ampoule_50ml_thanhphan', text: "Thành phần nổi bật của Tinh Chất Làm Dịu Và Giảm Nhờn ESPEAUNA REFRESHING AMPOULE 50ml: Chiết xuất trà xanh, rau má, lá diếp cá, lá tía tô, hạt ca cao, nha đam… (Làm dịu, kháng viêm và cấp ẩm); Niacinamide, Adenosine, PHA (Gluconolactone) (Làm sáng và chống lão hóa); Hyaluronic Acid, Sodium PCA (Cấp nước sâu, giữ ẩm dài lâu); Chiết xuất men lên men (Bifida, Lactobacillus, Saccharomyces) (Tăng cường sức sống cho da); Salicylic Acid (BHA), Citric/Malic/Lactic/Glycolic Acid (AHA) (Hỗ trợ làm sạch và tẩy tế bào chết dịu nhẹ)." },
   { id: 'espeauna_product_refreshing_ampoule_50ml_cachsudung', text: "Cách sử dụng Tinh Chất Làm Dịu Và Giảm Nhờn ESPEAUNA REFRESHING AMPOULE 50ml: Sau bước toner, lấy 2–3 giọt ampoule thoa đều lên mặt. Massage nhẹ đến khi thẩm thấu hoàn toàn. Dùng mỗi ngày sáng và tối." },
@@ -136,6 +136,13 @@ const KNOWLEDGE_BASE_CHUNKS = [
   // Thông tin kết nối khác
   { id: 'espeauna_thongtin_khac', text: "Espeauna cũng có các kênh kết nối khác như Fanpage Facebook (espeauna.official), Shopee, Lazada. Bạn có thể theo dõi website và fanpage để cập nhật các chương trình khuyến mãi hấp dẫn."}
 ];
+
+// Hàm chuẩn hóa tiếng Việt không dấu (đặt ở global scope)
+const normalizeVietnamese = (text) => {
+  text = text.normalize("NFD").replace(/[\u0300-\u036f]/g, ""); // Loại bỏ dấu
+  text = text.replace(/đ/g, "d").replace(/Đ/g, "D"); // Xử lý chữ đ/d
+  return text.toLowerCase();
+};
 
 /**
  * Hàm đơn giản để truy xuất các đoạn văn bản liên quan dựa trên từ khóa.
@@ -156,13 +163,6 @@ function retrieveRelevantChunks(query, knowledgeBase, numChunks = 3) {
     'nước', 'gel', 'kem', 'tinh', 'chất', 'bọt', 'rửa', 'mặt', 'dầu', 'tẩy', 'trang', 'dung', 'dịch', 'làm', 'sạch', 'sâu', 'dịu', 'giảm', 'nhờn', 'phục', 'hồi', 'ẩm', 'trắng', 'mờ', 'thâm', 'nám', 'collagen', 'tái', 'tạo', 'da', 'khoáng', 'biển'
   ]);
   
-  // Hàm chuẩn hóa tiếng Việt không dấu (có thể tích hợp thư viện bên ngoài nếu cần độ chính xác cao hơn)
-  const normalizeVietnamese = (text) => {
-    text = text.normalize("NFD").replace(/[\u0300-\u036f]/g, ""); // Loại bỏ dấu
-    text = text.replace(/đ/g, "d").replace(/Đ/g, "D"); // Xử lý chữ đ/d
-    return text.toLowerCase();
-  };
-
   const normalizedQuery = normalizeVietnamese(query);
   const keywords = normalizedQuery.split(/\s+/)
                                .filter(word => word.length > 2 && !stopWords.has(word));
@@ -222,13 +222,23 @@ app.post('/webhook', async (req, res) => {
         let geminiReplyText = "Xin lỗi, tôi không thể xử lý yêu cầu của bạn lúc này. Vui lòng thử lại sau.";
         let isProductRelatedQuery = false;
 
+        // Xác định xem câu hỏi có liên quan đến sản phẩm hay không
+        // Có thể mở rộng logic này để chính xác hơn, ví dụ: dựa trên các từ khóa sản phẩm cụ thể
+        const productKeywords = ['sản phẩm', 'giá', 'công dụng', 'thành phần', 'sử dụng', 'đối tượng', 'lưu ý', 'mua', 'đặt hàng', 'ship', 'thanh toán', 'đổi trả', 'bảo hành'];
+        const normalizedUserMessage = normalizeVietnamese(userMessage);
+        for (const keyword of productKeywords) {
+            if (normalizedUserMessage.includes(normalizeVietnamese(keyword))) {
+                isProductRelatedQuery = true;
+                break;
+            }
+        }
+
         try {
           // --- TRUY XUẤT THÔNG TIN LIÊN QUAN ---
           const relevantChunks = retrieveRelevantChunks(userMessage, KNOWLEDGE_BASE_CHUNKS, 3); // Lấy tối đa 3 đoạn liên quan
 
           let promptForGemini;
           if (relevantChunks.length > 0) {
-            isProductRelatedQuery = true;
             // Xây dựng prompt để hướng dẫn Gemini chỉ trả lời dựa trên thông tin được cung cấp
             // và yêu cầu rõ ràng khi không đủ thông tin.
             promptForGemini = `Dựa vào thông tin sau đây về Espeauna, hãy trả lời câu hỏi của người dùng bằng tiếng Việt. Nếu thông tin được cung cấp không đủ để trả lời câu hỏi, hãy nói rõ rằng bạn không có đủ thông tin và mời người dùng để lại số điện thoại để được tư vấn chi tiết hơn.
