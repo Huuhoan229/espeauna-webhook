@@ -339,30 +339,26 @@ app.post('/webhook', async (req, res) => {
 
   if (body.object === 'page') {
     for (const entry of body.entry) {
-      const webhook_event = entry.messaging[0];
-      const sender_psid = webhook_event.sender.id;
+if (!entry.messaging || !Array.isArray(entry.messaging) || entry.messaging.length === 0) {
+console.warn("⚠️ entry.messaging không tồn tại hoặc không hợp lệ:", entry);
+continue;
+}
 
-      if (webhook_event.message && webhook_event.message.text) {
-        const userMessage = webhook_event.message.text;
-        console.log(`Tin nhắn từ người dùng (${sender_psid}): "${userMessage}"`);
+const webhook_event = entry.messaging[0];
+if (!webhook_event.sender || !webhook_event.sender.id) {
+console.warn("⚠️ Không tìm thấy sender_psid:", webhook_event);
+continue;
+}
 
-        let geminiReplyText = "Xin lỗi, tôi không thể xử lý yêu cầu của bạn lúc này. Vui lòng thử lại sau.";
-        let isProductRelatedQuery = false;
-        let currentProductContext = null;
+const sender_psid = webhook_event.sender.id;
 
-        // Lấy ngữ cảnh sản phẩm hiện tại từ Firestore
-        currentProductContext = await getProductContext(sender_psid);
-        console.log(`Ngữ cảnh sản phẩm hiện tại cho ${sender_psid}: ${currentProductContext}`);
-
-        // Xác định xem câu hỏi có liên quan đến sản phẩm hay không
-        const productKeywords = ['sản phẩm', 'giá', 'công dụng', 'thành phần', 'sử dụng', 'đối tượng', 'lưu ý', 'mua', 'đặt hàng', 'ship', 'thanh toán', 'đổi trả', 'bảo hành', 'sản phẩm nào', 'sản phẩm gì'];
-        const normalizedUserMessage = normalizeVietnamese(userMessage);
-        for (const keyword of productKeywords) {
-            if (normalizedUserMessage.includes(normalizeVietnamese(keyword))) {
-                isProductRelatedQuery = true;
-                break;
-            }
-        }
+if (webhook_event.message && webhook_event.message.text) {
+const userMessage = webhook_event.message.text;
+// (giữ nguyên toàn bộ logic phía trong đây)
+} else {
+console.log(Nhận được sự kiện không phải tin nhắn văn bản từ ${sender_psid}:, webhook_event);
+}
+}
         
         // Lưu tin nhắn của người dùng vào Firestore
         await saveMessage(sender_psid, 'user', userMessage, currentProductContext);
